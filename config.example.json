@@ -1,0 +1,25 @@
+{
+  "form_view_url": "https://docs.google.com/forms/d/e/TU_FORM_ID/viewform",
+  "spreadsheet_url": "https://docs.google.com/spreadsheets/d/TU_SHEET_ID/edit",
+  "output_dir": "C:\\HV_PC",
+  "html_public_base_url": "",
+  "open_html_after_generate": false,
+  "apps_script": {
+    "web_app_url": "https://script.google.com/macros/s/TU_DEPLOYMENT_ID/exec",
+    "token": "cambia-este-token",
+    "folder_id": "TU_FOLDER_ID_EN_DRIVE"
+  },
+  "entry_ids": {
+    "id_equipo": "entry.1111111111",
+    "link_hoja_vida": "entry.2222222222",
+    "nombre_equipo": "entry.3333333333",
+    "serial_bios": "entry.4444444444",
+    "mac_principal": "entry.5555555555",
+    "modelo_equipo": "entry.6666666666",
+    "discos_particiones": "entry.7777777777",
+    "red_tipo_conexion": "entry.8888888888",
+    "red_ipv4": "entry.9999999999",
+    "red_velocidad": "entry.1010101010",
+    "ram_resumen": "entry.1212121212"
+  }
+}

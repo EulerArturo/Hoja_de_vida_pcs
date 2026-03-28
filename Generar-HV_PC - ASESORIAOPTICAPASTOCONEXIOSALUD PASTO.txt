@@ -1,0 +1,215 @@
+# RUTA DONDE SE GUARDA EL ARCHIVO
+$folderPath = "C:\HV_PC"
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+function Convert-ToSafeHtml {
+    param([AllowNull()] [object]$Value)
+
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) {
+        return "N/A"
+    }
+
+    return [System.Net.WebUtility]::HtmlEncode([string]$Value)
+}
+
+function Get-CimSafe {
+    param([Parameter(Mandatory = $true)] [string]$ClassName)
+
+    try {
+        return @(Get-CimInstance -ClassName $ClassName -ErrorAction Stop)
+    } catch {
+        Write-Warning "No se pudo consultar ${ClassName}: $($_.Exception.Message)"
+        return @()
+    }
+}
+
+function Format-WmiDate {
+    param([AllowNull()] [string]$DateValue)
+
+    if ([string]::IsNullOrWhiteSpace($DateValue)) {
+        return "N/A"
+    }
+
+    try {
+        return ([Management.ManagementDateTimeConverter]::ToDateTime($DateValue)).ToString("yyyy-MM-dd HH:mm:ss")
+    } catch {
+        return $DateValue
+    }
+}
+
+function Get-ProcessorArchitectureName {
+    param([AllowNull()] [int]$Architecture)
+
+    switch ($Architecture) {
+        0 { return "x86" }
+        1 { return "MIPS" }
+        2 { return "Alpha" }
+        3 { return "PowerPC" }
+        5 { return "ARM" }
+        6 { return "Itanium" }
+        9 { return "x64" }
+        12 { return "ARM64" }
+        Default { return "Desconocida ($Architecture)" }
+    }
+}
+
+# Verificar si la carpeta existe, si no, crearla
+if (-not (Test-Path -LiteralPath $folderPath)) {
+    New-Item -Path $folderPath -ItemType Directory | Out-Null
+    Write-Host "Carpeta 'HV_PC' creada en: $folderPath"
+} else {
+    Write-Host "La carpeta 'HV_PC' ya existe en: $folderPath"
+}
+
+$htmlPath = Join-Path -Path $folderPath -ChildPath "HV_PC.html"
+
+# Consultas una sola vez para mejorar rendimiento
+$bios = Get-CimSafe -ClassName "Win32_BIOS" | Select-Object -First 1
+$computerSystem = Get-CimSafe -ClassName "Win32_ComputerSystem" | Select-Object -First 1
+$processor = Get-CimSafe -ClassName "Win32_Processor" | Select-Object -First 1
+$physicalMemory = Get-CimSafe -ClassName "Win32_PhysicalMemory"
+$diskDrives = Get-CimSafe -ClassName "Win32_DiskDrive"
+
+try {
+    $netAdapters = @(Get-NetAdapter -ErrorAction Stop | Sort-Object -Property Name)
+} catch {
+    Write-Warning "No se pudieron consultar adaptadores de red: $($_.Exception.Message)"
+    $netAdapters = @()
+}
+
+try {
+    $ipAddresses = @(
+        Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+        Where-Object {
+            $_.IPAddress -ne "127.0.0.1" -and
+            $_.IPAddress -notlike "169.254.*"
+        } |
+        Sort-Object -Property InterfaceAlias, IPAddress
+    )
+} catch {
+    Write-Warning "No se pudieron consultar direcciones IP: $($_.Exception.Message)"
+    $ipAddresses = @()
+}
+
+$totalMemoryGB = "N/A"
+if ($computerSystem -and $computerSystem.TotalPhysicalMemory) {
+    $totalMemoryGB = [math]::Round(($computerSystem.TotalPhysicalMemory / 1GB), 2)
+}
+
+$memoryRows = if ($physicalMemory.Count -gt 0) {
+    ($physicalMemory | ForEach-Object {
+        "<tr><td>$(Convert-ToSafeHtml $_.DeviceLocator)</td><td>$(Convert-ToSafeHtml $_.Manufacturer)</td><td>$([math]::Round(($_.Capacity / 1GB), 2))</td><td>$(Convert-ToSafeHtml $_.Speed)</td></tr>"
+    }) -join "`n"
+} else {
+    "<tr><td colspan='4'>Sin datos disponibles</td></tr>"
+}
+
+$diskRows = if ($diskDrives.Count -gt 0) {
+    ($diskDrives | ForEach-Object {
+        "<tr><td>$(Convert-ToSafeHtml $_.Model)</td><td>$(Convert-ToSafeHtml $_.SerialNumber)</td><td>$([math]::Round(($_.Size / 1GB), 2))</td><td>$(Convert-ToSafeHtml $_.MediaType)</td></tr>"
+    }) -join "`n"
+} else {
+    "<tr><td colspan='4'>Sin datos disponibles</td></tr>"
+}
+
+$adapterRows = if ($netAdapters.Count -gt 0) {
+    ($netAdapters | ForEach-Object {
+        "<tr><td>$(Convert-ToSafeHtml $_.Name)</td><td>$(Convert-ToSafeHtml $_.MacAddress)</td><td>$(Convert-ToSafeHtml $_.Status)</td><td>$(Convert-ToSafeHtml $_.LinkSpeed)</td></tr>"
+    }) -join "`n"
+} else {
+    "<tr><td colspan='4'>Sin datos disponibles</td></tr>"
+}
+
+$ipRows = if ($ipAddresses.Count -gt 0) {
+    ($ipAddresses | ForEach-Object {
+        "<tr><td>$(Convert-ToSafeHtml $_.InterfaceAlias)</td><td>$(Convert-ToSafeHtml $_.IPAddress)</td><td>$(Convert-ToSafeHtml $_.PrefixLength)</td></tr>"
+    }) -join "`n"
+} else {
+    "<tr><td colspan='3'>Sin datos disponibles</td></tr>"
+}
+
+$htmlContent = @"
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Informe de la PC</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; }
+        h1 { color: #333366; }
+        h2 { color: #2e6da4; }
+        p { color: #555555; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .info { margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>Informe Detallado de la PC</h1>
+
+    <div class="info">
+        <h2>BIOS</h2>
+        <p><strong>Número de serie:</strong> $(Convert-ToSafeHtml $bios.SerialNumber)</p>
+        <p><strong>Fabricante:</strong> $(Convert-ToSafeHtml $bios.Manufacturer)</p>
+        <p><strong>Versión SMBIOS:</strong> $(Convert-ToSafeHtml $bios.SMBIOSBIOSVersion)</p>
+        <p><strong>Fecha de liberación:</strong> $(Convert-ToSafeHtml (Format-WmiDate $bios.ReleaseDate))</p>
+    </div>
+
+    <div class="info">
+        <h2>Sistema</h2>
+        <p><strong>Fabricante:</strong> $(Convert-ToSafeHtml $computerSystem.Manufacturer)</p>
+        <p><strong>Modelo:</strong> $(Convert-ToSafeHtml $computerSystem.Model)</p>
+        <p><strong>Nombre de usuario:</strong> $(Convert-ToSafeHtml $computerSystem.UserName)</p>
+        <p><strong>Nombre del equipo:</strong> $(Convert-ToSafeHtml $computerSystem.Name)</p>
+        <p><strong>Dominio:</strong> $(Convert-ToSafeHtml $computerSystem.Domain)</p>
+        <p><strong>Memoria física total (GB):</strong> $(Convert-ToSafeHtml $totalMemoryGB)</p>
+    </div>
+
+    <div class="info">
+        <h2>CPU</h2>
+        <p><strong>Nombre:</strong> $(Convert-ToSafeHtml $processor.Name)</p>
+        <p><strong>Número de núcleos:</strong> $(Convert-ToSafeHtml $processor.NumberOfCores)</p>
+        <p><strong>Número de procesadores lógicos:</strong> $(Convert-ToSafeHtml $processor.NumberOfLogicalProcessors)</p>
+        <p><strong>Velocidad máxima (MHz):</strong> $(Convert-ToSafeHtml $processor.MaxClockSpeed)</p>
+        <p><strong>Arquitectura:</strong> $(Convert-ToSafeHtml (Get-ProcessorArchitectureName $processor.Architecture))</p>
+        <p><strong>ID del procesador:</strong> $(Convert-ToSafeHtml $processor.ProcessorId)</p>
+    </div>
+
+    <div class="info">
+        <h2>Memoria Física</h2>
+        <table>
+            <tr><th>Ubicación del dispositivo</th><th>Fabricante</th><th>Capacidad (GB)</th><th>Velocidad (MHz)</th></tr>
+            $memoryRows
+        </table>
+    </div>
+
+    <div class="info">
+        <h2>Discos</h2>
+        <table>
+            <tr><th>Modelo</th><th>Número de serie</th><th>Tamaño (GB)</th><th>Tipo de medio</th></tr>
+            $diskRows
+        </table>
+    </div>
+
+    <div class="info">
+        <h2>Red</h2>
+        <h3>Adaptadores de Red</h3>
+        <table>
+            <tr><th>Nombre</th><th>Dirección MAC</th><th>Estado</th><th>Velocidad</th></tr>
+            $adapterRows
+        </table>
+
+        <h3>Direcciones IP</h3>
+        <table>
+            <tr><th>Interfaz</th><th>Dirección IP</th><th>Longitud del prefijo</th></tr>
+            $ipRows
+        </table>
+    </div>
+</body>
+</html>
+"@
+
+$htmlContent | Out-File -FilePath $htmlPath -Encoding utf8
+Write-Host "Archivo HTML generado en: $htmlPath"
