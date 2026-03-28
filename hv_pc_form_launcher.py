@@ -33,14 +33,7 @@ def load_config(config_path: Path) -> dict:
         if key not in config:
             raise ValueError(f"Falta la clave obligatoria en config.json: {key}")
 
-    entry_required = [
-        "id_equipo",
-        "link_hoja_vida",
-        "nombre_equipo",
-        "serial_bios",
-        "mac_principal",
-        "modelo_equipo",
-    ]
+    entry_required = ["id_equipo"]
     for key in entry_required:
         if key not in config["entry_ids"]:
             raise ValueError(f"Falta entry_ids.{key} en config.json")
@@ -49,6 +42,11 @@ def load_config(config_path: Path) -> dict:
 
 
 OPTIONAL_ENTRY_KEYS = [
+    "link_hoja_vida",
+    "nombre_equipo",
+    "serial_bios",
+    "mac_principal",
+    "modelo_equipo",
     "discos_particiones",
     "red_tipo_conexion",
     "red_ipv4",
@@ -589,6 +587,7 @@ def upload_html_with_apps_script(record_id: str, html_path: Path, config: dict) 
 
     html_bytes = html_path.read_bytes()
     payload = {
+        "action": "upload_html",
         "token": apps_script.get("token", ""),
         "record_id": record_id,
         "file_name": html_path.name,
@@ -615,15 +614,67 @@ def upload_html_with_apps_script(record_id: str, html_path: Path, config: dict) 
     return (data.get("renderUrl") or data.get("url") or "").strip()
 
 
+def save_technical_record_with_apps_script(record_id: str, html_link: str, pc: dict, config: dict):
+    apps_script = config.get("apps_script") or {}
+    web_app_url = (apps_script.get("web_app_url") or "").strip()
+    if not web_app_url:
+        return
+
+    spreadsheet_id = (apps_script.get("spreadsheet_id") or "").strip()
+    if not spreadsheet_id:
+        sheet_url = (config.get("spreadsheet_url") or "").strip()
+        if "/d/" in sheet_url:
+            spreadsheet_id = sheet_url.split("/d/")[1].split("/")[0]
+
+    red = build_network_summary(pc)
+
+    payload = {
+        "action": "save_technical",
+        "token": apps_script.get("token", ""),
+        "spreadsheet_id": spreadsheet_id,
+        "sheet_name": (apps_script.get("technical_sheet_name") or "TECNICA_EQUIPOS"),
+        "record_id": record_id,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "technical": {
+            "id_equipo": record_id,
+            "link_hoja_vida": html_link,
+            "nombre_equipo": pc.get("hostname", "N/A"),
+            "serial_bios": pc.get("serial_bios", "N/A"),
+            "mac_principal": pc.get("mac_principal", "N/A"),
+            "modelo_equipo": pc.get("modelo_equipo", "N/A"),
+            "discos_particiones": build_disks_summary(pc),
+            "red_tipo_conexion": red.get("tipo", "N/A"),
+            "red_ipv4": red.get("ipv4", "N/A"),
+            "red_velocidad": red.get("velocidad", "N/A"),
+            "ram_resumen": build_ram_summary(pc),
+            "os_name": pc.get("os_name", "N/A"),
+            "os_version": pc.get("os_version", "N/A"),
+            "last_boot": pc.get("last_boot", "N/A"),
+            "cpu": pc.get("cpu", "N/A"),
+            "ram_gb": pc.get("ram_gb", "N/A"),
+        },
+    }
+
+    body = json.dumps(payload).encode("utf-8")
+    req = request.Request(
+        web_app_url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    with request.urlopen(req, timeout=60) as resp:
+        raw = resp.read().decode("utf-8", errors="replace")
+
+    data = json.loads(raw)
+    if not data.get("ok"):
+        raise RuntimeError(f"No se pudo guardar registro tecnico en Sheet: {data}")
+
+
 def build_prefill_url(form_view_url: str, entry_ids: dict, values: dict) -> str:
     params = {
         "usp": "pp_url",
         entry_ids["id_equipo"]: values["id_equipo"],
-        entry_ids["link_hoja_vida"]: values["link_hoja_vida"],
-        entry_ids["nombre_equipo"]: values["nombre_equipo"],
-        entry_ids["serial_bios"]: values["serial_bios"],
-        entry_ids["mac_principal"]: values["mac_principal"],
-        entry_ids["modelo_equipo"]: values["modelo_equipo"],
     }
 
     for key in OPTIONAL_ENTRY_KEYS:
@@ -646,6 +697,12 @@ def main() -> int:
         html_path = generate_html(record_id, pc, Path(config["output_dir"]))
         uploaded_html_link = upload_html_with_apps_script(record_id, html_path, config)
         html_link = uploaded_html_link or resolve_html_link(html_path, config)
+
+        try:
+            save_technical_record_with_apps_script(record_id, html_link, pc, config)
+            print("Registro tecnico guardado en backend.")
+        except Exception as backend_exc:
+            print("ADVERTENCIA: No se pudo guardar registro tecnico en backend:", backend_exc)
 
         prefill_values = {
             "id_equipo": record_id,

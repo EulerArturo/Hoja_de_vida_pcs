@@ -6,6 +6,13 @@ Este script genera automaticamente:
 - Subida opcional del HTML a Drive por Apps Script
 - URL prellenada del formulario con columnas tecnicas
 
+## Modo recomendado (bloquear edicion de datos tecnicos)
+Para que el usuario NO pueda modificar datos tecnicos:
+1. Deja en el Form solo campos humanos (sede, nombre, cedula, area, etc.).
+2. Conserva solo `ID_EQUIPO` como campo tecnico en el Form (opcional, para trazabilidad).
+3. El script guarda datos tecnicos directamente en la hoja `TECNICA_EQUIPOS` via Apps Script (`action=save_technical`).
+4. El formulario solo captura lo humano; lo tecnico ya no depende del usuario.
+
 Luego abre el formulario para que el usuario complete solo los datos humanos.
 
 ## Archivos

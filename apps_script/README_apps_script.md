@@ -9,6 +9,7 @@ Recibir desde Python el HTML en base64, crear archivo en Google Drive y devolver
 3. En Proyecto -> Configuracion del proyecto -> Propiedades del script, agrega:
    - APP_TOKEN = un valor secreto largo
    - DRIVE_FOLDER_ID = ID de la carpeta de Drive donde guardaras los HTML
+   - SPREADSHEET_ID = ID de la hoja principal (opcional si lo envias desde config.json)
 4. Click en Implementar -> Nueva implementacion.
 5. Tipo: Aplicacion web.
 6. Ejecutar como: tu cuenta.
@@ -20,6 +21,8 @@ En config.json:
 - apps_script.web_app_url = URL /exec
 - apps_script.token = APP_TOKEN
 - apps_script.folder_id = opcional (si no lo pasas, usa DRIVE_FOLDER_ID de propiedades)
+- apps_script.spreadsheet_id = ID de la hoja donde guardar tecnico
+- apps_script.technical_sheet_name = nombre de pestaña tecnica (ej: TECNICA_EQUIPOS)
 
 ## Prueba rapida
 1. Ejecuta python hv_pc_form_launcher.py

@@ -7,7 +7,9 @@
   "apps_script": {
     "web_app_url": "https://script.google.com/macros/s/TU_DEPLOYMENT_ID/exec",
     "token": "cambia-este-token",
-    "folder_id": "TU_FOLDER_ID_EN_DRIVE"
+    "folder_id": "TU_FOLDER_ID_EN_DRIVE",
+    "spreadsheet_id": "TU_SPREADSHEET_ID",
+    "technical_sheet_name": "TECNICA_EQUIPOS"
   },
   "entry_ids": {
     "id_equipo": "entry.1111111111",

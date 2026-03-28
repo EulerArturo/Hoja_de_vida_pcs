@@ -7,19 +7,21 @@
   "apps_script": {
     "web_app_url": "https://script.google.com/macros/s/AKfycbwzJa6SwgWh3niZc-RJft8kHAbXpZtoX2Avtr5E7loGOpfiizusR0fWUFkh-K058l13Lg/exec",
     "token": "HVCS_2026",
-    "folder_id": "1fKLS1cf3tJArApO0GqHuAmyBxobyxElD"
+    "folder_id": "1fKLS1cf3tJArApO0GqHuAmyBxobyxElD",
+    "spreadsheet_id": "1kIkEeUBsMtpGVR7LT3v7di8n47g4WoTUv9s3gtBInlc",
+    "technical_sheet_name": "TECNICA_EQUIPOS"
   },
   "entry_ids": {
     "id_equipo": "entry.265559397",
-    "link_hoja_vida": "entry.1089075609",
-    "nombre_equipo": "entry.1980454762",
-    "serial_bios": "entry.1604920318",
-    "mac_principal": "entry.686580091",
-    "modelo_equipo": "entry.627874539",
-    "discos_particiones": "entry.102694480",
-    "red_tipo_conexion": "entry.1314691084",
-    "red_ipv4": "entry.1379393481",
-    "red_velocidad": "entry.936635391",
-    "ram_resumen": "entry.1674739483"
+    "link_hoja_vida": "",
+    "nombre_equipo": "",
+    "serial_bios": "",
+    "mac_principal": "",
+    "modelo_equipo": "",
+    "discos_particiones": "",
+    "red_tipo_conexion": "",
+    "red_ipv4": "",
+    "red_velocidad": "",
+    "ram_resumen": ""
   }
 }
