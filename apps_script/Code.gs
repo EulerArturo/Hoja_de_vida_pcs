@@ -50,6 +50,12 @@ function saveTechnicalRecord(payload) {
     return jsonResponse({ ok: false, error: "No se definio spreadsheet_id" });
   }
 
+  try {
+    ensureFormSubmitTrigger_(spreadsheetId);
+  } catch (triggerErr) {
+    Logger.log("No se pudo asegurar trigger onFormSubmit en save_technical: " + String(triggerErr));
+  }
+
   var sheetName = payload.sheet_name || "TECNICA_EQUIPOS";
   var ss = SpreadsheetApp.openById(spreadsheetId);
   var sheet = ss.getSheetByName(sheetName);
@@ -173,6 +179,17 @@ var REQUIRED_RESPONSE_FIELDS_ = [
   "ID_EQUIPO"
 ];
 
+var RESPONSE_SHEET_REQUIRED_HEADERS_ = [
+  "MARCA_TEMPORAL",
+  "SEDE",
+  "NOMBRES_Y_APELLIDOS",
+  "CEDULA_DE_CIUDADANIA",
+  "AREA",
+  "CARGO",
+  "TIPO_DE_EQUIPO",
+  "ID_EQUIPO"
+];
+
 var INCIDENCIAS_SHEET_NAME_ = "INCIDENCIAS_FORM";
 var CONTROL_IDS_SHEET_NAME_ = "CONTROL_IDS";
 
@@ -219,6 +236,36 @@ function getValueByNormalizedHeader_(row, headerMap, headerName) {
     return "";
   }
   return row[idx];
+}
+
+function getValueByHeaderAliases_(row, headerMap, aliasList) {
+  if (!row || !headerMap || !aliasList || !aliasList.length) {
+    return "";
+  }
+
+  for (var i = 0; i < aliasList.length; i++) {
+    var normalizedAlias = normalizeHeader_(aliasList[i]);
+    var aliasIdx = headerMap[normalizedAlias];
+    if (aliasIdx !== undefined) {
+      return row[aliasIdx];
+    }
+  }
+
+  var headerKeys = Object.keys(headerMap);
+  for (var k = 0; k < headerKeys.length; k++) {
+    var currentKey = headerKeys[k];
+    for (var j = 0; j < aliasList.length; j++) {
+      var targetAlias = normalizeHeader_(aliasList[j]);
+      if (
+        currentKey.indexOf(targetAlias) >= 0 ||
+        targetAlias.indexOf(currentKey) >= 0
+      ) {
+        return row[headerMap[currentKey]];
+      }
+    }
+  }
+
+  return "";
 }
 
 function findRowByIdInSheet_(sheet, idValue) {
@@ -378,6 +425,40 @@ function ensureControlIdsSheet_(ss) {
   }
 
   return sheet;
+}
+
+function ensureFormSubmitTrigger_(spreadsheetId) {
+  if (!spreadsheetId) {
+    return;
+  }
+
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    var trigger = triggers[i];
+    if (trigger.getHandlerFunction() !== "onFormSubmit") {
+      continue;
+    }
+    if (trigger.getEventType() !== ScriptApp.EventType.ON_FORM_SUBMIT) {
+      continue;
+    }
+
+    var sourceId = "";
+    try {
+      sourceId = (trigger.getTriggerSourceId() || "").toString();
+    } catch (sourceErr) {
+      sourceId = "";
+    }
+
+    if (!sourceId || sourceId === spreadsheetId) {
+      return;
+    }
+  }
+
+  ScriptApp
+    .newTrigger("onFormSubmit")
+    .forSpreadsheet(spreadsheetId)
+    .onFormSubmit()
+    .create();
 }
 
 function findControlIdRow_(controlSheet, recordId) {
@@ -717,6 +798,87 @@ function applyResponseDataQuality_(responseSheet, techById) {
   });
 }
 
+function isSystemSheet_(name, technicalSheetName) {
+  return (
+    name === (technicalSheetName || "TECNICA_EQUIPOS") ||
+    name === "RESUMEN" ||
+    name === INCIDENCIAS_SHEET_NAME_ ||
+    name === CONTROL_IDS_SHEET_NAME_
+  );
+}
+
+function getSheetHeaders_(sheet) {
+  if (!sheet || sheet.getLastColumn() < 1) {
+    return [];
+  }
+  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+}
+
+function computeResponseSheetScore_(sheet) {
+  var name = sheet.getName();
+  var normalizedName = normalizeHeader_(name);
+  var headers = getSheetHeaders_(sheet);
+  var hasIdHeader = findIdColumnIndex_(headers) >= 0;
+  var rowCount = sheet.getLastRow();
+
+  var nameLooksLikeResponses = (
+    normalizedName.indexOf("RESPUESTAS") >= 0 ||
+    normalizedName.indexOf("FORM_RESPONSES") >= 0
+  );
+
+  var score = 0;
+  if (nameLooksLikeResponses) {
+    score += 100;
+  }
+  if (hasIdHeader) {
+    score += 50;
+  }
+  if (rowCount > 1) {
+    score += 10;
+  }
+
+  var headerMap = buildHeaderIndexMap_(headers);
+  var requiredFound = 0;
+  for (var i = 0; i < RESPONSE_SHEET_REQUIRED_HEADERS_.length; i++) {
+    if (headerMap[normalizeHeader_(RESPONSE_SHEET_REQUIRED_HEADERS_[i])] !== undefined) {
+      requiredFound += 1;
+    }
+  }
+  score += requiredFound * 8;
+
+  return {
+    score: score,
+    rowCount: rowCount,
+    hasIdHeader: hasIdHeader,
+    nameLooksLikeResponses: nameLooksLikeResponses,
+    requiredFound: requiredFound,
+  };
+}
+
+function syncControlIdsFromResponses_(ss, responseData, responseIdIdx, techById) {
+  if (!responseData || responseData.length < 2 || responseIdIdx < 0) {
+    return 0;
+  }
+
+  var updated = 0;
+  for (var i = 1; i < responseData.length; i++) {
+    var row = responseData[i];
+    var rowId = (row[responseIdIdx] || "").toString().trim();
+    if (!rowId || !techById[rowId]) {
+      continue;
+    }
+
+    if (!isPendingId_(ss, rowId)) {
+      continue;
+    }
+
+    markIdAsUsed_(ss, rowId);
+    updated += 1;
+  }
+
+  return updated;
+}
+
 function detectResponseSheet_(ss, technicalSheetName) {
   var configured = PropertiesService.getScriptProperties().getProperty("FORM_RESPONSES_SHEET");
   if (configured) {
@@ -727,21 +889,40 @@ function detectResponseSheet_(ss, technicalSheetName) {
   }
 
   var allSheets = ss.getSheets();
+  var bestSheet = null;
+  var bestMeta = null;
+
   for (var i = 0; i < allSheets.length; i++) {
-    var name = allSheets[i].getName();
-    if (name === technicalSheetName || name === "RESUMEN") {
+    var currentSheet = allSheets[i];
+    var name = currentSheet.getName();
+    if (isSystemSheet_(name, technicalSheetName)) {
       continue;
     }
-    var normalized = normalizeHeader_(name);
-    if (
-      normalized.indexOf("RESPUESTAS") >= 0 ||
-      normalized.indexOf("FORM_RESPONSES") >= 0
-    ) {
-      return allSheets[i];
+
+    var meta = computeResponseSheetScore_(currentSheet);
+    if (!(meta.nameLooksLikeResponses || meta.hasIdHeader)) {
+      continue;
+    }
+
+    if (!bestSheet) {
+      bestSheet = currentSheet;
+      bestMeta = meta;
+      continue;
+    }
+
+    if (meta.score > bestMeta.score) {
+      bestSheet = currentSheet;
+      bestMeta = meta;
+      continue;
+    }
+
+    if (meta.score === bestMeta.score && meta.rowCount > bestMeta.rowCount) {
+      bestSheet = currentSheet;
+      bestMeta = meta;
     }
   }
 
-  return null;
+  return bestSheet;
 }
 
 function refreshResumenSheet_(ss, technicalSheetName) {
@@ -790,6 +971,12 @@ function refreshResumenSheet_(ss, technicalSheetName) {
   }
   var responseHeaderMap = buildHeaderIndexMap_(responseHeaders);
 
+  try {
+    syncControlIdsFromResponses_(ss, responseData, responseIdIdx, techById);
+  } catch (syncErr) {
+    Logger.log("No se pudo sincronizar CONTROL_IDS desde respuestas: " + String(syncErr));
+  }
+
   var output = [];
   var outputHeaders = [
     "MARCA_TEMPORAL",
@@ -799,6 +986,7 @@ function refreshResumenSheet_(ss, technicalSheetName) {
     "AREA",
     "CARGO",
     "TIPO_DE_EQUIPO",
+    "TIENE_OTRO_EQUIPO_ASIGNADO",
     "ANYDESK",
     "ESTADO_FISICO_DEL_EQUIPO",
     "OBSERVACIONES_NOVEDADES",
@@ -842,6 +1030,12 @@ function refreshResumenSheet_(ss, technicalSheetName) {
       getValueByNormalizedHeader_(respRow, responseHeaderMap, "AREA"),
       getValueByNormalizedHeader_(respRow, responseHeaderMap, "CARGO"),
       getValueByNormalizedHeader_(respRow, responseHeaderMap, "TIPO_DE_EQUIPO"),
+      getValueByHeaderAliases_(respRow, responseHeaderMap, [
+        "TIENE_OTRO_EQUIPO_ASIGNADO",
+        "TIENE_OTRO_EQUIPO_ASIGN",
+        "OTRO_EQUIPO_ASIGNADO",
+        "TIENE_OTRO_EQUIPO"
+      ]),
       getValueByNormalizedHeader_(respRow, responseHeaderMap, "ANYDESK"),
       getValueByNormalizedHeader_(respRow, responseHeaderMap, "ESTADO_FISICO_DEL_EQUIPO"),
       getValueByNormalizedHeader_(respRow, responseHeaderMap, "OBSERVACIONES_NOVEDADES"),
@@ -889,6 +1083,12 @@ function actualizarResumen() {
   var technicalSheetName =
     PropertiesService.getScriptProperties().getProperty("TECHNICAL_SHEET_NAME") ||
     "TECNICA_EQUIPOS";
+
+  try {
+    ensureFormSubmitTrigger_(spreadsheetId);
+  } catch (triggerErr) {
+    Logger.log("No se pudo asegurar trigger onFormSubmit: " + String(triggerErr));
+  }
 
   var ss = SpreadsheetApp.openById(spreadsheetId);
   refreshResumenSheet_(ss, technicalSheetName);

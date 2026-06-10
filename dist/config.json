@@ -7,7 +7,9 @@
   "apps_script": {
     "web_app_url": "https://script.google.com/macros/s/AKfycbwzJa6SwgWh3niZc-RJft8kHAbXpZtoX2Avtr5E7loGOpfiizusR0fWUFkh-K058l13Lg/exec",
     "token": "HVCS_2026",
-    "folder_id": "1fKLS1cf3tJArApO0GqHuAmyBxobyxElD"
+    "folder_id": "1fKLS1cf3tJArApO0GqHuAmyBxobyxElD",
+    "spreadsheet_id": "1kIkEeUBsMtpGVR7LT3v7di8n47g4WoTUv9s3gtBInlc",
+    "technical_sheet_name": "TECNICA_EQUIPOS"
   },
   "entry_ids": {
     "id_equipo": "entry.265559397",
