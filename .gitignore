@@ -3,23 +3,48 @@ __pycache__/
 *.py[cod]
 *.pyo
 
+# Local and temporary configuration
+config.json
+config.local.json
+*.local.json
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*.log
+
+# Generated reports and local runtime files
+*.html
+form_viewform.html
+form_fields_map.txt
+form_fields_map_latest.txt
+
 # Virtual environments
 .venv/
 venv/
+.venv_*/
+env/
+ENV/
 
 # Build artifacts
 build/
+dist/
+dist/config.json
 *.spec
+*.exe
+*.msi
+*.zip
 
 # OS / editor
 .DS_Store
 Thumbs.db
 .vscode/
 
-# Local runtime artifacts
-form_viewform.html
-form_fields_map.txt
-form_fields_map_latest.txt
+# Windows temporary files
+*.lnk
+desktop.ini
+$RECYCLE.BIN/
 
-# Optional local-only configs (keep example in repo)
-config.local.json
+# Keep the sanitized template tracked
+!config.example.json
