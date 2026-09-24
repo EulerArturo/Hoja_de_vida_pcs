@@ -200,7 +200,7 @@ git diff --check
 Este proyecto se distribuye bajo la [Licencia MIT](LICENSE).
 
 Copyright (c) 2026 Euler Arturo Chapid Inagan.
-# Hoja de Vida de Equipos PC
+
 
 Automatiza el registro de activos de TI en campo:
 
@@ -234,14 +234,6 @@ Automatiza el registro de activos de TI en campo:
 - `apps_script/README_apps_script.md`: Despliegue Apps Script.
 - `README_python_flujo.md`: Flujo tecnico detallado.
 - `dist/hv_pc_form_launcher.exe`: Ejecutable de produccion.
-
-## Requisitos
-
-- Windows con PowerShell.
-- Python 3.10+ (si ejecutas script fuente).
-- Dependencia `requests` instalada desde `requirements.txt`.
-- Cuenta Google con acceso a Forms/Sheets/Drive.
-- Apps Script Web App desplegada.
 
 ## Configuracion Rapida
 
